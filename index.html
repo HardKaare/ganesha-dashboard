@@ -99,7 +99,12 @@
     <div class="lead" id="loginLead">Log ind for at se dashboardet.</div>
     <div id="loginForm">
       <input type="email" id="email" placeholder="din@email.dk" autocomplete="email">
-      <button class="go" id="sendLink">Send login-link</button>
+      <button class="go" id="sendLink">Send login-kode</button>
+    </div>
+    <div id="codeForm" style="display:none">
+      <input type="text" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-cifret kode fra mailen" maxlength="8">
+      <button class="go" id="verifyCode">Log ind</button>
+      <button class="go" id="resend" style="background:transparent;color:var(--dim);border:1px solid var(--line);margin-top:8px">Send ny kode</button>
     </div>
     <div class="msg" id="loginMsg"></div>
   </div>
@@ -177,26 +182,47 @@ const overlay = $("#overlay"), dash = $("#dash");
 function showLogin(lead){
   overlay.classList.remove("hidden");
   dash.style.display = "none";
+  const lf = $("#loginForm"), cf = $("#codeForm");
+  if (lf && cf) { lf.style.display = "block"; cf.style.display = "none"; }
   if (lead) $("#loginLead").textContent = lead;
 }
 function showDash(){ overlay.classList.add("hidden"); dash.style.display = "block"; }
 function setMsg(t, cls){ const m = $("#loginMsg"); m.textContent = t || ""; m.className = "msg" + (cls ? " " + cls : ""); }
 
-// ---- magic-link login ----
-$("#sendLink").addEventListener("click", async () => {
+// ---- email OTP login (indtast kode; magic-link i mailen virker ogsaa) ----
+async function sendCode(){
   const email = $("#email").value.trim();
   if (!email) { setMsg("Indtast din email.", "err"); return; }
   $("#sendLink").disabled = true;
-  setMsg("Sender login-link ...");
+  setMsg("Sender login-kode ...");
   const { error } = await client.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: window.location.origin + window.location.pathname },
   });
   $("#sendLink").disabled = false;
-  if (error) { setMsg(error.message || "Kunne ikke sende link.", "err"); return; }
-  setMsg("Tjek din mail og klik login-linket.", "okmsg");
-});
-$("#email").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#sendLink").click(); });
+  if (error) { setMsg(error.message || "Kunne ikke sende kode.", "err"); return; }
+  $("#loginForm").style.display = "none";
+  $("#codeForm").style.display = "block";
+  $("#code").focus();
+  setMsg("Tjek din mail. Indtast koden herunder (eller klik linket i mailen).", "okmsg");
+}
+async function verifyCode(){
+  const email = $("#email").value.trim();
+  const token = $("#code").value.trim().replace(/\s+/g, "");
+  if (!token) { setMsg("Indtast koden fra mailen.", "err"); return; }
+  $("#verifyCode").disabled = true;
+  setMsg("Bekraefter kode ...");
+  const { error } = await client.auth.verifyOtp({ email, token, type: "email" });
+  $("#verifyCode").disabled = false;
+  if (error) { setMsg(error.message || "Forkert eller udloebet kode.", "err"); return; }
+  setMsg("Logget ind ...", "okmsg");
+  // onAuthStateChange -> loadData() overtager herfra
+}
+$("#sendLink").addEventListener("click", sendCode);
+$("#verifyCode").addEventListener("click", verifyCode);
+$("#resend").addEventListener("click", sendCode);
+$("#email").addEventListener("keydown", (e) => { if (e.key === "Enter") sendCode(); });
+$("#code").addEventListener("keydown", (e) => { if (e.key === "Enter") verifyCode(); });
 
 $("#logout").addEventListener("click", async () => { await client.auth.signOut(); showLogin("Du er logget ud."); });
 $("#reload").addEventListener("click", () => loadData());
